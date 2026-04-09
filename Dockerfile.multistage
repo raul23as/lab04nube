@@ -1,0 +1,36 @@
+# Etapa 1: Builder (instala dependencias Python con herramientas de compilacion)
+FROM python:3.11-alpine AS builder
+
+RUN apk add --no-cache gcc musl-dev linux-headers
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Etapa 2: Imagen final (Chromium + solo lo necesario para ejecutar)
+FROM python:3.11-alpine
+
+# Instala Chromium en la imagen final (necesario en runtime)
+RUN apk add --no-cache \
+    chromium \
+    chromium-chromedriver
+
+# Variables de entorno para Selenium
+ENV CHROME_BINARY=/usr/bin/chromium-browser
+ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
+
+WORKDIR /app
+
+# Copia solo los paquetes Python instalados desde el builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copia el codigo fuente
+COPY . .
+
+# Crea usuario no-root
+RUN adduser -D appuser && chown -R appuser /app
+USER appuser
+
+EXPOSE 5000
+CMD ["python", "app.py"]
